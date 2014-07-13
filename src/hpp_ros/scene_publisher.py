@@ -26,7 +26,10 @@ from geometry_msgs.msg import TransformStamped
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
 from geometry_msgs.msg import Point
-from tf import TransformBroadcaster, transformations
+from tf import TransformBroadcaster
+from hpp import Quaternion
+
+import hpp
 
 class Obstacle (object):
     def __init__ (self, name, frameId):
@@ -34,26 +37,68 @@ class Obstacle (object):
         self.frameId = frameId
         self.position = (0,0,0,1,0,0,0)
 
+class Transform (object):
+    def __init__ (self, quat, trans):
+        self.quat = quat
+        self.trans = trans
+
+    def __mul__ (self, other):
+        if not isinstance (other, Transform):
+            raise TypeError ("expecting Transform type object")
+        trans = self.trans + (self.quat * Quaternion (0, other.trans) *
+                              self.quat.conjugate ()).array [1:]
+        quat = self.quat * other.quat
+        return Transform (quat, trans)
+    def __str__ (self):
+        return \
+            """
+Transform
+  Quaternion:  %s
+  Translation: %s """%(self.quat, self.trans)
+
+
+I4 = np.matrix ([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]])
+def getRootJointPosition (robot):
+    pos = robot.getRootJointPosition ()
+    return Transform (Quaternion (pos [3:7]), np.array (pos [0:3]))
+
 def computeRobotPositionAnchor (self):
-    self.transform.transform.rotation = (0.0, 0.0, 0, 1)
-    self.transform.transform.translation = (0.0, 0.0, 0.0)
+    pos = self.rootJointPosition
+    self.transform.transform.rotation = (pos.quat.array [1],
+                                          pos.quat.array [2],
+                                          pos.quat.array [3],
+                                          pos.quat.array [0])
+    self.transform.transform.translation = (pos.trans [0],
+                                             pos.trans [1],
+                                             pos.trans [2])
     self.js.position = self.robotConfig [:len (self.js.name)]
 
 def computeRobotPositionFreeflyer (self):
-    self.transform.transform.rotation = (self.robotConfig [4],
-                                          self.robotConfig [5],
-                                          self.robotConfig [6],
-                                          self.robotConfig [3])
-    self.transform.transform.translation = (self.robotConfig [0],
-                                             self.robotConfig [1],
-                                             self.robotConfig [2])
+    jointMotion = Transform (Quaternion (self.robotConfig [3:7]),
+                             self.robotConfig [0:3])
+    pos = self.rootJointPosition * jointMotion
+    self.transform.transform.rotation = (pos.quat.array [1],
+                                          pos.quat.array [2],
+                                          pos.quat.array [3],
+                                          pos.quat.array [0])
+    self.transform.transform.translation = (pos.trans [0],
+                                             pos.trans [1],
+                                             pos.trans [2])
     self.js.position = self.robotConfig[7:len (self.js.name)+7]
 
 def computeRobotPositionPlanar (self):
     theta = .5*self.robotConfig [2]
-    self.transform.transform.rotation = (0 , 0, sin (theta), cos (theta))
-    self.transform.transform.translation = \
-        (self.robotConfig [0], self.robotConfig [1], 0)
+    jointMotion = Transform (Quaternion (cos (theta), 0 , 0, sin (theta)),
+                             np.array ([self.robotConfig [0],
+                                        self.robotConfig [1], 0]))
+    pos = self.rootJointPosition * jointMotion
+    self.transform.transform.rotation = (pos.quat.array [1],
+                                          pos.quat.array [2],
+                                          pos.quat.array [3],
+                                          pos.quat.array [0])
+    self.transform.transform.translation = (pos.trans [0],
+                                             pos.trans [1],
+                                             pos.trans [2])
     self.js.position = self.robotConfig[3:len (self.js.name)+3]
 
 ## Display of robot and obstacle configurations in Rviz
@@ -68,6 +113,11 @@ def computeRobotPositionPlanar (self):
 class ScenePublisher (object):
     def __init__ (self, robot):
         self.tf_root = robot.tf_root
+        try:
+            self.rootJointPosition = getRootJointPosition (robot)
+        except hpp.Error:
+            self.rootJointPosition = Transform (Quaternion ([1,0,0,0]),
+                                                np.array ([0,0,0]))
         self.referenceFrame = "map"
         self.rootJointType = robot.rootJointType
         if self.rootJointType == "freeflyer":
