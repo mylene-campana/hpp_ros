@@ -29,7 +29,7 @@ class PathPlayer (object):
         length = self.client.problem.pathLength (pathId)
         t = 0
         while t < length :
-            q = self.client.problem.configAtDistance (pathId, t)
+            q = self.client.problem.configAtParam (pathId, t)
             self.publisher.robotConfig = q
             self.publisher.publishRobots ()
             t += self.dt
@@ -40,7 +40,7 @@ class PathPlayer (object):
         t = 0
         tau = []
         while t < length :
-            q = self.client.problem.configAtDistance (pathId, t)
+            q = self.client.problem.configAtParam (pathId, t)
             tau.append(q)
             t += self.dt
         fh = open(fname,"wb")
@@ -52,7 +52,7 @@ class PathPlayer (object):
         t = 0
         tau = []
         while t < length :
-            q = self.client.problem.configAtDistance (pathId, t)
+            q = self.client.problem.configAtParam (pathId, t)
             tau.append(q)
             t += self.dt
         fh = open(fname,"a")
