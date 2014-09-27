@@ -121,10 +121,10 @@ class ScenePublisher (object):
         self.referenceFrame = "map"
         self.rootJointType = robot.rootJointType
         if self.rootJointType == "freeflyer":
-            jointNames = robot.jointNames [4:]
+            jointNames = robot.jointNames [2:]
             self.computeRobotPosition = computeRobotPositionFreeflyer
         elif self.rootJointType == "planar":
-            jointNames = robot.jointNames [3:]
+            jointNames = robot.jointNames [2:]
             self.computeRobotPosition = computeRobotPositionPlanar
         elif self.rootJointType == "anchor":
             jointNames = robot.jointNames
