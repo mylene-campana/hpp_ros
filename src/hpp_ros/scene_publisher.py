@@ -17,7 +17,7 @@
 # hpp-ros.  If not, see
 # <http://www.gnu.org/licenses/>.
 
-from math import sin, cos
+from math import sqrt, atan2
 import numpy as np
 import rospy
 import time
@@ -71,7 +71,9 @@ def computeRobotPositionAnchor (self):
     self.transform.transform.translation = (pos.trans [0],
                                              pos.trans [1],
                                              pos.trans [2])
-    self.js.position = self.robotConfig [:len (self.js.name)]
+    self.js.position = []
+    for (rank, convert) in self.jointConversion:
+        self.js.position.append (convert (self.robotConfig [rank:]))
 
 def computeRobotPositionFreeflyer (self):
     jointMotion = Transform (Quaternion (self.robotConfig [3:7]),
@@ -84,11 +86,18 @@ def computeRobotPositionFreeflyer (self):
     self.transform.transform.translation = (pos.trans [0],
                                              pos.trans [1],
                                              pos.trans [2])
-    self.js.position = self.robotConfig[7:len (self.js.name)+7]
+    self.js.position = []
+    for (rank, convert) in self.jointConversion:
+        self.js.position.append (convert (self.robotConfig [rank:]))
 
 def computeRobotPositionPlanar (self):
-    theta = .5*self.robotConfig [2]
-    jointMotion = Transform (Quaternion (cos (theta), 0 , 0, sin (theta)),
+    c = self.robotConfig [2]
+    s = self.robotConfig [3]
+    if -1e-6 < s and s < 1e-6:
+        sinth2 = 0; costh2 = 1
+    else:
+        sinth2 = sqrt ((1-c)/2); costh2 = sqrt (s**2/(2*(1-c)))
+    jointMotion = Transform (Quaternion (costh2, 0 , 0, sinth2),
                              np.array ([self.robotConfig [0],
                                         self.robotConfig [1], 0]))
     pos = self.rootJointPosition * jointMotion
@@ -99,7 +108,9 @@ def computeRobotPositionPlanar (self):
     self.transform.transform.translation = (pos.trans [0],
                                              pos.trans [1],
                                              pos.trans [2])
-    self.js.position = self.robotConfig[3:len (self.js.name)+3]
+    self.js.position = []
+    for (rank, convert) in self.jointConversion:
+        self.js.position.append (convert (self.robotConfig [rank:]))
 
 ## Display of robot and obstacle configurations in Rviz
 #
@@ -121,16 +132,18 @@ class ScenePublisher (object):
         self.referenceFrame = "map"
         self.rootJointType = robot.rootJointType
         if self.rootJointType == "freeflyer":
-            jointNames = robot.jointNames [2:]
+            self.firstActuatedJoint = 2
             self.computeRobotPosition = computeRobotPositionFreeflyer
         elif self.rootJointType == "planar":
-            jointNames = robot.jointNames [2:]
+            self.firstActuatedJoint = 2
             self.computeRobotPosition = computeRobotPositionPlanar
         elif self.rootJointType == "anchor":
-            jointNames = robot.jointNames
+            self.firstActuatedJoint = 0
             self.computeRobotPosition = computeRobotPositionAnchor
         else:
             raise RuntimeError ("Unknow root joint type: " + self.rootJointType)
+
+        jointNames = robot.jointNames [self.firstActuatedJoint:]
         self.pubRobots = dict ()
         self.pubRobots ['robot'] = rospy.Publisher ('/joint_states', JointState)
         self.pubRobots ['marker'] = \
@@ -139,6 +152,7 @@ class ScenePublisher (object):
         self.broadcaster = TransformBroadcaster ()
         self.js = JointState ()
         self.js.name = jointNames
+        self.initJointConversion (robot)
         # Create constant transformation between the map frame and the robot
         # base link frame.
         self.transform = TransformStamped ()
@@ -154,6 +168,28 @@ class ScenePublisher (object):
         self.objects = dict ()
         self.markerArray = MarkerArray()
         self.oid = 0
+
+    ## Initialize map to build rviz configuration
+    #  In hpp, unbouded rotation joint have 2 configuration variables, this
+    #  makes the mapping of configurations between ROS and hpp non trivial
+    def initJointConversion (self, robot):
+        self.jointConversion = []
+        jointNames = robot.getJointNames ()
+        rank = 0
+        for j in jointNames [:self.firstActuatedJoint]:
+            size = robot.getJointConfigSize (j)
+            rank += size
+        for j in jointNames [self.firstActuatedJoint:]:
+            size = robot.getJointConfigSize (j)
+            if size == 1:
+                self.jointConversion.append ((rank, lambda x: x[0]))
+            elif size == 2:
+                self.jointConversion.append ((rank, lambda x: atan2
+                                              (x[1], x[0])))
+            else:
+                raise RuntimeError ("Unknow joint of size " + str (size))
+            rank += size
+
 
     def addObject (self, name, frameId):
         """
