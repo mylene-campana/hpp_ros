@@ -62,7 +62,7 @@ def getRootJointPosition (robot):
     pos = robot.getRootJointPosition ()
     return Transform (Quaternion (pos [3:7]), np.array (pos [0:3]))
 
-def computeRobotPositionAnchor (self):
+def computeRobotPositionAnchor (self, config):
     pos = self.rootJointPosition
     self.transform.transform.rotation = (pos.quat.array [1],
                                           pos.quat.array [2],
@@ -73,11 +73,12 @@ def computeRobotPositionAnchor (self):
                                              pos.trans [2])
     self.js.position = []
     for (rank, convert) in self.jointConversion:
-        self.js.position.append (convert (self.robotConfig [rank:]))
+        self.js.position.append (convert (config [rank:]))
 
-def computeRobotPositionFreeflyer (self):
-    jointMotion = Transform (Quaternion (self.robotConfig [3:7]),
-                             self.robotConfig [0:3])
+def computeRobotPositionFreeflyer (self, config):
+    ff_rot = config [self.cfgBegin+3:self.cfgBegin+7]
+    ff_pos = config [self.cfgBegin+0:self.cfgBegin+3]
+    jointMotion = Transform (Quaternion (ff_rot), ff_pos)
     pos = self.rootJointPosition * jointMotion
     self.transform.transform.rotation = (pos.quat.array [1],
                                           pos.quat.array [2],
@@ -88,18 +89,17 @@ def computeRobotPositionFreeflyer (self):
                                              pos.trans [2])
     self.js.position = []
     for (rank, convert) in self.jointConversion:
-        self.js.position.append (convert (self.robotConfig [rank:]))
+        self.js.position.append (convert (config [rank:]))
 
-def computeRobotPositionPlanar (self):
-    c = self.robotConfig [2]
-    s = self.robotConfig [3]
+def computeRobotPositionPlanar (self, config):
+    c = config [self.cfgBegin + 2]
+    s = config [self.cfgBegin + 3]
     if -1e-6 < s and s < 1e-6:
         sinth2 = 0; costh2 = 1
     else:
         sinth2 = sqrt ((1-c)/2); costh2 = sqrt (s**2/(2*(1-c)))
     jointMotion = Transform (Quaternion (costh2, 0 , 0, sinth2),
-                             np.array ([self.robotConfig [0],
-                                        self.robotConfig [1], 0]))
+                             np.array ([config [self.cfgBegin + 0], config [self.cfgBegin + 1], 0]))
     pos = self.rootJointPosition * jointMotion
     self.transform.transform.rotation = (pos.quat.array [1],
                                           pos.quat.array [2],
@@ -110,7 +110,7 @@ def computeRobotPositionPlanar (self):
                                              pos.trans [2])
     self.js.position = []
     for (rank, convert) in self.jointConversion:
-        self.js.position.append (convert (self.robotConfig [rank:]))
+        self.js.position.append (convert (config [rank:]))
 
 ## Display of robot and obstacle configurations in Rviz
 #
@@ -122,37 +122,68 @@ def computeRobotPositionPlanar (self):
 #      computes the relative positions of all links of the robot. Rviz then
 #      displays the positions of the links.
 class ScenePublisher (object):
-    def __init__ (self, robot):
-        self.tf_root = robot.tf_root
-        try:
-            self.rootJointPosition = getRootJointPosition (robot)
-        except hpp.Error:
-            self.rootJointPosition = Transform (Quaternion ([1,0,0,0]),
+    def __init__ (self, robot, tf_root = None, prefix = None, jointNames = None, cfgBegin = None):
+        if prefix is None:
+            self.rootJointType = robot.rootJointType
+            if self.rootJointType == "freeflyer":
+                jointNames = robot.jointNames[2:]
+                self.computeRobotPosition = computeRobotPositionFreeflyer
+            elif self.rootJointType == "planar":
+                jointNames = robot.jointNames[2:]
+                self.computeRobotPosition = computeRobotPositionPlanar
+            elif self.rootJointType == "anchor":
+                jointNames = robot.jointNames[:]
+                self.computeRobotPosition = computeRobotPositionAnchor
+            else:
+              raise RuntimeError ("Unknow root joint type: " + self.rootJointType)
+            try:
+                rootJointPosition = getRootJointPosition (robot)
+            except hpp.Error:
+                rootJointPosition = Transform (Quaternion ([1,0,0,0]),
                                                 np.array ([0,0,0]))
-        self.referenceFrame = "map"
-        self.rootJointType = robot.rootJointType
-        if self.rootJointType == "freeflyer":
-            self.firstActuatedJoint = 2
-            self.computeRobotPosition = computeRobotPositionFreeflyer
-        elif self.rootJointType == "planar":
-            self.firstActuatedJoint = 2
-            self.computeRobotPosition = computeRobotPositionPlanar
-        elif self.rootJointType == "anchor":
-            self.firstActuatedJoint = 0
-            self.computeRobotPosition = computeRobotPositionAnchor
+            cfgBegin = 0
+            self.build (robot, robot.tf_root, rootJointPosition, "", jointNames, cfgBegin)
         else:
-            raise RuntimeError ("Unknow root joint type: " + self.rootJointType)
+            self.rootJointType = robot.rootJointType[prefix]
+            if self.rootJointType == "freeflyer":
+                shift = 2
+                self.computeRobotPosition = computeRobotPositionFreeflyer
+            elif self.rootJointType == "planar":
+                shift = 2
+                self.computeRobotPosition = computeRobotPositionPlanar
+            elif self.rootJointType == "anchor":
+                shift = 0
+                self.computeRobotPosition = computeRobotPositionAnchor
+            else:
+              raise RuntimeError ("Unknow root joint type: " + self.rootJointType)
+            rootJointPosition = Transform (Quaternion ([1,0,0,0]),
+                                              np.array ([0,0,0]))
+            self.build (robot, tf_root, rootJointPosition, prefix + "/", jointNames[shift:], cfgBegin)
 
-        jointNames = robot.jointNames [self.firstActuatedJoint:]
+    def build (self, robot, tf_root, rootJointPosition, prefix, jointNames, cfgBegin):
+        """
+        jointNames contains all the actuated joints of the specified robot
+        """
+        if prefix is "" or prefix is None:
+          self.tf_root = tf_root
+        else:
+          self.tf_root = "/" + prefix + tf_root
+        self.rootJointPosition = rootJointPosition
+        self.referenceFrame = "map"
+
+        self.cfgBegin = cfgBegin
         self.pubRobots = dict ()
-        self.pubRobots ['robot'] = rospy.Publisher ('/joint_states', JointState)
-        self.pubRobots ['marker'] = \
-            rospy.Publisher ('/visualization_marker_array', MarkerArray)
-        rospy.init_node ('hpp', log_level=rospy.FATAL )
-        self.broadcaster = TransformBroadcaster ()
+        self.pubRobots ['marker'] = rospy.Publisher ('/visualization_marker_array', MarkerArray)
         self.js = JointState ()
-        self.js.name = jointNames
-        self.initJointConversion (robot)
+        if len(jointNames) is 0:
+            self.pubRobots ['robot'] = None
+            self.jointConversion = list ()
+        else:
+            self.pubRobots ['robot'] = rospy.Publisher ("/" + prefix + 'joint_states', JointState)
+            self.js.name = jointNames
+            self.initJointConversion (robot, prefix, jointNames)
+        self.broadcaster = TransformBroadcaster ()
+        rospy.init_node ('hpp', log_level=rospy.FATAL )
         # Create constant transformation between the map frame and the robot
         # base link frame.
         self.transform = TransformStamped ()
@@ -172,15 +203,14 @@ class ScenePublisher (object):
     ## Initialize map to build rviz configuration
     #  In hpp, unbouded rotation joint have 2 configuration variables, this
     #  makes the mapping of configurations between ROS and hpp non trivial
-    def initJointConversion (self, robot):
+    def initJointConversion (self, robot, prefix, jointNames):
         self.jointConversion = []
-        jointNames = robot.getJointNames ()
         rank = 0
-        for j in jointNames [:self.firstActuatedJoint]:
-            size = robot.getJointConfigSize (j)
-            rank += size
-        for j in jointNames [self.firstActuatedJoint:]:
-            size = robot.getJointConfigSize (j)
+        for n in robot.getJointNames ():
+            size = robot.getJointConfigSize (n)
+            if not n.startswith (prefix) or n [len(prefix):] not in jointNames:
+                rank += size
+                continue
             if size == 1:
                 self.jointConversion.append ((rank, lambda x: x[0]))
             elif size == 2:
@@ -189,7 +219,6 @@ class ScenePublisher (object):
             else:
                 raise RuntimeError ("Unknow joint of size " + str (size))
             rank += size
-
 
     def addObject (self, name, frameId):
         """
@@ -307,7 +336,6 @@ class ScenePublisher (object):
 
             self.pubRobots ['marker'].publish (self.markerArray)
 
-
     def moveObject (self, name, position):
         self.objects [name].position = position
 
@@ -318,25 +346,27 @@ class ScenePublisher (object):
 
     def publishRobots (self):
         if not rospy.is_shutdown ():
+            config = self.robotConfig
             now = rospy.Time.now ()
-            self.js.header.stamp.secs = now.secs
-            self.js.header.stamp.nsecs = now.nsecs
-            self.js.header.seq += 1
+            self.computeRobotPosition (self, config)
             self.transform.header.stamp.secs = now.secs
             self.transform.header.stamp.nsecs = now.nsecs
             self.transform.header.seq = self.js.header.seq
-            self.computeRobotPosition (self)
-            self.js.velocity = len (self.js.position)*[0.,]
-            self.js.effort = len (self.js.position)*[0.,]
+            if self.pubRobots ['robot'] is not None:
+                self.js.header.stamp.secs = now.secs
+                self.js.header.stamp.nsecs = now.nsecs
+                self.js.header.seq += 1
+                self.js.velocity = len (self.js.position)*[0.,]
+                self.js.effort = len (self.js.position)*[0.,]
+                rospy.loginfo (self.js)
 
             rospy.loginfo (self.transform)
-            rospy.loginfo (self.js)
             self.broadcaster.sendTransform \
                 (self.transform.transform.translation,
                  self.transform.transform.rotation,
                  now, self.tf_root, self.referenceFrame)
-            self.pubRobots ['robot'].publish (self.js)
-
+            if self.pubRobots ['robot'] is not None:
+                self.pubRobots ['robot'].publish (self.js)
 
     def __call__ (self, args):
         self.robotConfig = args
