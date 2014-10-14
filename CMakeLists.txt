@@ -41,6 +41,12 @@ catkin_package()
 
 catkin_python_setup()
 
+INSTALL (FILES
+  src/hpp_ros/manipulation/__init__.py
+  src/hpp_ros/manipulation/scene_publisher.py
+  DESTINATION ${CATKIN_PACKAGE_PYTHON_DESTINATION}/manipulation
+  )
+
 install(FILES launch/hpp_ros.launch
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
   )
