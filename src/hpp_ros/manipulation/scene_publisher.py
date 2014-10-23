@@ -47,5 +47,5 @@ class ScenePublisher (object):
         self.publish ()
 
     def __call__ (self, args):
-        robot.robotConfig = args
+        self.robotConfig = args
         self.publish ()

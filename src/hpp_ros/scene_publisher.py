@@ -97,7 +97,7 @@ def computeRobotPositionPlanar (self, config):
     if -1e-6 < s and s < 1e-6:
         sinth2 = 0; costh2 = 1
     else:
-        sinth2 = sqrt ((1-c)/2); costh2 = sqrt (s**2/(2*(1-c)))
+        costh2 = sqrt ((c+1)/2); sinth2 = s / (2*costh2)
     jointMotion = Transform (Quaternion (costh2, 0 , 0, sinth2),
                              np.array ([config [self.cfgBegin + 0], config [self.cfgBegin + 1], 0]))
     pos = self.rootJointPosition * jointMotion
