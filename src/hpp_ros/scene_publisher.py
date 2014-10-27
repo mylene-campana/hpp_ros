@@ -156,8 +156,11 @@ class ScenePublisher (object):
                 self.computeRobotPosition = computeRobotPositionAnchor
             else:
               raise RuntimeError ("Unknow root joint type: " + self.rootJointType)
-            rootJointPosition = Transform (Quaternion ([1,0,0,0]),
-                                              np.array ([0,0,0]))
+            try:
+              pos = robot.client.manipulation.robot.getRootJointPosition (prefix)
+              rootJointPosition = Transform (Quaternion (pos [3:7]), np.array (pos [0:3]))
+            except:
+              rootJointPosition = Transform (Quaternion ([1,0,0,0]), np.array ([0,0,0]))
             self.build (robot, tf_root, rootJointPosition, prefix + "/", jointNames[shift:], cfgBegin)
 
     def build (self, robot, tf_root, rootJointPosition, prefix, jointNames, cfgBegin):
