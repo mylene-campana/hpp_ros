@@ -24,6 +24,7 @@
 
 namespace hpp {
   namespace ros {
+    using geometry_msgs::Pose;
     using sensor_msgs::JointState;
     using hpp::model::JointPtr_t;
     using hpp::model::DevicePtr_t;
@@ -48,6 +49,25 @@ namespace hpp {
 	JointPtr_t joint = robot->getJointByName (jointState.name [i]);
 	configuration [joint->rankInConfiguration ()] = jointState.position [i];
       }
+    }
+    /// Convert geometry_msgs::PoseStamped to hpp::model::Configuration_t
+    /// \param rank position in the output configuration where the input object
+    ///        pose is written,
+    /// \param objectPose input pose of the object
+    /// \retval configuration configuration configuration.
+    ///         configuration [rank:rank+7] is filled with translation and
+    ///         quaternion.
+    inline void objectPoseToConfig (const size_type& rank,
+				    const Pose& objectPose,
+				    ConfigurationOut_t configuration)
+    {
+      configuration [rank + 0] = objectPose.position.x;
+      configuration [rank + 1] = objectPose.position.y;
+      configuration [rank + 2] = objectPose.position.z;
+      configuration [rank + 3] = objectPose.orientation.w;
+      configuration [rank + 4] = objectPose.orientation.x;
+      configuration [rank + 5] = objectPose.orientation.y;
+      configuration [rank + 6] = objectPose.orientation.z;
     }
   } // namespace ros
 } // namespace hpp
