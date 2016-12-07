@@ -56,3 +56,24 @@ install(FILES rviz_configs/hpp_ros.rviz
   )
 
 setup_project_finalize()
+
+install (FILES
+  src/hpp/corbaserver/simple_robot/robot.py
+  src/hpp/corbaserver/simple_robot/__init__.py
+  DESTINATION ${PYTHON_SITELIB}/hpp/corbaserver/simple_robot)
+install (FILES
+  src/hpp/corbaserver/puzzle_robot/robot.py
+  src/hpp/corbaserver/puzzle_robot/__init__.py
+  DESTINATION ${PYTHON_SITELIB}/hpp/corbaserver/puzzle_robot)
+install (FILES
+  src/hpp/corbaserver/ur5_robot/robot.py
+  src/hpp/corbaserver/ur5_robot/__init__.py
+  DESTINATION ${PYTHON_SITELIB}/hpp/corbaserver/ur5_robot)
+install (FILES
+  src/hpp/corbaserver/humain/robot.py
+  src/hpp/corbaserver/humain/__init__.py
+  DESTINATION ${PYTHON_SITELIB}/hpp/corbaserver/humain)
+install (FILES
+  src/hpp/corbaserver/robot_2d/robot.py
+  src/hpp/corbaserver/robot_2d/__init__.py
+  DESTINATION ${PYTHON_SITELIB}/hpp/corbaserver/robot_2d)

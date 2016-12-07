@@ -96,8 +96,16 @@ def computeRobotPositionPlanar (self, config):
     s = config [self.cfgBegin + 3]
     if -1e-6 < s and s < 1e-6:
         sinth2 = 0; costh2 = 1
+    elif -1-1e-6 < c and c < -1+1e-6:
+        costh2 = 0
+        if -1-1e-6 < s and s < -1+1e-6:
+            sinth2 = -1
+        else:
+            sinth2 = 1
     else:
-        costh2 = sqrt ((c+1)/2); sinth2 = s / (2*costh2)
+        costh2 = sqrt ((c+1)/float(2))
+        sinth2 = s / (2*costh2) # does not seem to work well for [0, 1] or [0, -1]
+    print costh2; print sinth2
     jointMotion = Transform (Quaternion (costh2, 0 , 0, sinth2),
                              np.array ([config [self.cfgBegin + 0], config [self.cfgBegin + 1], 0]))
     pos = self.rootJointPosition * jointMotion
