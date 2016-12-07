@@ -103,9 +103,7 @@ def computeRobotPositionPlanar (self, config):
         else:
             sinth2 = 1
     else:
-        costh2 = sqrt ((c+1)/float(2))
-        sinth2 = s / (2*costh2) # does not seem to work well for [0, 1] or [0, -1]
-    print costh2; print sinth2
+        costh2 = sqrt ((c+1)/2.); sinth2 = s / (2*costh2)
     jointMotion = Transform (Quaternion (costh2, 0 , 0, sinth2),
                              np.array ([config [self.cfgBegin + 0], config [self.cfgBegin + 1], 0]))
     pos = self.rootJointPosition * jointMotion
@@ -164,8 +162,11 @@ class ScenePublisher (object):
                 self.computeRobotPosition = computeRobotPositionAnchor
             else:
               raise RuntimeError ("Unknow root joint type: " + self.rootJointType)
-            rootJointPosition = Transform (Quaternion ([1,0,0,0]),
-                                              np.array ([0,0,0]))
+            try:
+              pos = robot.client.manipulation.robot.getRootJointPosition (prefix)
+              rootJointPosition = Transform (Quaternion (pos [3:7]), np.array (pos [0:3]))
+            except:
+              rootJointPosition = Transform (Quaternion ([1,0,0,0]), np.array ([0,0,0]))
             self.build (robot, tf_root, rootJointPosition, prefix + "/", jointNames[shift:], cfgBegin)
 
     def build (self, robot, tf_root, rootJointPosition, prefix, jointNames, cfgBegin):
